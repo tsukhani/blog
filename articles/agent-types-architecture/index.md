@@ -7,6 +7,8 @@ title: Designing Portable AI Agent Types
 
 *How we built a scalable system for deploying role-specific AI agents while preserving personality, enforcing boundaries, and enabling safe updates.*
 
+![Cover](images/cover.png)
+
 ---
 
 When you're running multiple AI agents — each serving different users with different capabilities — you quickly run into architectural questions:
@@ -77,6 +79,8 @@ Think of it like object-oriented programming:
 │  Runtime state. Agent executes here.                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+![3-Tier Architecture](images/diagram-1-structure.png)
 
 ---
 
@@ -251,6 +255,8 @@ This:
 
 On first session, OpenClaw creates the sandbox and syncs from the workspace. BOOTSTRAP.md guides the user through onboarding, then deletes itself.
 
+![Setup Flow](images/diagram-2-creation.png)
+
 ---
 
 ## Update Flow: Auto-Propagation
@@ -276,6 +282,8 @@ sandboxes/agent-chetan-xxx/AGENTS.md updated (chmod 444)
 | **Sandbox** | 5 config files (444) | USER.md, memory/, skills (OpenClaw syncs) |
 
 The key rule: **Sandbox USER.md is never touched** — it contains learned user data.
+
+![Update Flow](images/diagram-3-update.png)
 
 ---
 
@@ -337,6 +345,8 @@ The watcher detects the changes and runs `propagate.sh movie`, which:
 ---
 
 ## File Mutability Summary
+
+![File Mutability](images/diagram-4-mutability.png)
 
 | Category | Files | Who Edits | Propagated? |
 |----------|-------|-----------|-------------|
