@@ -41,46 +41,13 @@ Think of it like object-oriented programming:
 - **User Workspace** = Class (implements the interface)
 - **Sandbox** = Instance (runtime execution + state)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 1: Role (Interface)                                 │
-│  roles/movie/                                             │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (template with {{placeholders}})                  │
-│  └── skills/                                                    │
-│                                                                 │
-│  Canonical source. Changes propagate to all implementations.    │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ setup-user.sh (initial) + propagate.sh (ongoing)
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 2: User Workspace (Class)                                 │
-│  workspace/users/chetan/                                       │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (template + channel IDs)                          │
-│  ├── skills/                                                    │
-│  └── .role → "movie"                                     │
-│                                                                 │
-│  Config only. No runtime state. Admin-editable.                 │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ OpenClaw sync (on sandbox creation)
-                    │ + propagate.sh (ongoing, 5 files only)
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 3: Sandbox (Instance)                                     │
-│  sandboxes/agent-chetan-xxx/                                    │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (live document, agent-managed)                    │
-│  ├── skills/                                                    │
-│  └── memory/  ← ONLY place memory lives                        │
-│                                                                 │
-│  Runtime state. Agent executes here.                            │
-└─────────────────────────────────────────────────────────────────┘
-```
-
 ![3-Tier Architecture](images/diagram-1-structure.png)
+
+| Tier | Name | Path | Purpose |
+|------|------|------|---------|
+| 1 | **Role** | `roles/movie/` | Template with 6 md files + skills/ |
+| 2 | **User Workspace** | `workspace/users/chetan/` | Per-user config + `.role` file |
+| 3 | **Sandbox** | `sandboxes/agent-xxx/` | Runtime execution + memory/ |
 
 ---
 
@@ -263,16 +230,13 @@ On first session, OpenClaw creates the sandbox and syncs from the workspace. BOO
 
 We run a file watcher service (`role-watcher`) that detects changes to role files and automatically propagates them:
 
-```
-roles/movie/AGENTS.md changes
-    ↓ detected by inotifywait
-    ↓ 3-second debounce
-    ↓ propagate.sh movie
-    ↓
-workspace/users/chetan/AGENTS.md updated
-    ↓
-sandboxes/agent-chetan-xxx/AGENTS.md updated (chmod 444)
-```
+**Propagation Flow:**
+1. `roles/movie/AGENTS.md` changes
+2. `inotifywait` detects the change
+3. 3-second debounce
+4. `propagate.sh movie` runs
+5. `workspace/users/chetan/AGENTS.md` updated
+6. `sandboxes/agent-xxx/AGENTS.md` updated (chmod 444)
 
 ### What Gets Propagated
 
@@ -401,7 +365,7 @@ workspace/
 │   │   └── skills/
 │   └── staff/
 │       └── ...
-├── agents/
+├── users/
 │   ├── chetan/
 │   │   ├── .role → "movie"
 │   │   └── (6 files + skills/)
