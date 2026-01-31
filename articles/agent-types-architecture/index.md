@@ -1,8 +1,3 @@
----
-layout: default
-title: Designing Portable AI Agent Types
----
-
 # Designing Portable AI Agent Types: A Template-Based Architecture for Multi-Agent Systems
 
 *How we built a scalable system for deploying role-specific AI agents while preserving personality, enforcing boundaries, and enabling safe updates.*
@@ -46,7 +41,7 @@ Think of it like object-oriented programming:
 | Tier | Name | Path | Purpose |
 |------|------|------|---------|
 | 1 | **Role** | `roles/movie/` | Template with 6 md files + skills/ |
-| 2 | **User Workspace** | `workspace/users/chetan/` | Per-user config + `.role` file |
+| 2 | **User Workspace** | `workspace/users/alice/` | Per-user config + `.role` file |
 | 3 | **Sandbox** | `sandboxes/agent-xxx/` | Runtime execution + memory/ |
 
 ---
@@ -178,8 +173,8 @@ USER.md has three different states across the tiers:
 # USER.md - About Your Human
 
 - **Name:** {{USER_NAME}}
-- **Workspace:** chetan
-- **Telegram ID:** 1329596227
+- **Workspace:** alice
+- **Telegram ID:** <telegram-id>
 
 ## Movie Preferences
 - **Favorite genres:** {{FAVORITE_GENRES}}
@@ -191,11 +186,11 @@ Channel-specific info is pre-filled during setup. Other placeholders remain.
 ### Tier 3 (Sandbox): Live Document
 
 ```markdown
-# USER.md - About Chetan
+# USER.md - About Alice
 
-- **Name:** Chetan
-- **Workspace:** chetan
-- **Telegram ID:** 1329596227
+- **Name:** Alice
+- **Workspace:** alice
+- **Telegram ID:** <telegram-id>
 
 ## Movie Preferences
 - **Favorite genres:** Sci-fi, Action, Thriller
@@ -211,11 +206,11 @@ The agent fills in the rest via BOOTSTRAP.md during the first session. This vers
 When deploying a new user on an role:
 
 ```bash
-./setup-user.sh movie chetan 1329596227
+./setup-user.sh movie alice <telegram-id>
 ```
 
 This:
-1. Creates `workspace/users/chetan/`
+1. Creates `workspace/users/alice/`
 2. Copies all 6 files + skills from `roles/movie/`
 3. Pre-fills `{{USERNAME}}` and `{{TELEGRAM_ID}}`
 4. Creates `.role` file containing `movie`
@@ -235,7 +230,7 @@ We run a file watcher service (`role-watcher`) that detects changes to role file
 2. `inotifywait` detects the change
 3. 3-second debounce
 4. `propagate.sh movie` runs
-5. `workspace/users/chetan/AGENTS.md` updated
+5. `workspace/users/alice/AGENTS.md` updated
 6. `sandboxes/agent-xxx/AGENTS.md` updated (chmod 444)
 
 ### What Gets Propagated
@@ -301,8 +296,8 @@ Copy sonarr skill to `roles/movie/skills/sonarr/`
 **2. File watcher auto-propagates:**
 
 The watcher detects the changes and runs `propagate.sh movie`, which:
-- Updates `workspace/users/chetan/` (5 files + skills/)
-- Updates `sandboxes/agent-chetan-xxx/` (5 files, 444 permissions)
+- Updates `workspace/users/alice/` (5 files + skills/)
+- Updates `sandboxes/agent-alice-xxx/` (5 files, 444 permissions)
 
 **3. Next session:** All movie agents have TV show access, with their preferences intact.
 
@@ -366,13 +361,13 @@ workspace/
 │   └── staff/
 │       └── ...
 ├── users/
-│   ├── chetan/
+│   ├── alice/
 │   │   ├── .role → "movie"
 │   │   └── (6 files + skills/)
-│   ├── nisha/
+│   ├── bob/
 │   │   ├── .role → "staff"
 │   │   └── ...
-│   └── nora/
+│   └── carol/
 │       └── ...
 └── services/
     └── role-watcher/

@@ -2,6 +2,8 @@
 
 *How we built a scalable system for deploying role-specific AI agents while preserving personality, enforcing boundaries, and enabling safe updates.*
 
+![Cover](images/cover.png)
+
 ---
 
 When you're running multiple AI agents — each serving different users with different capabilities — you quickly run into architectural questions:
@@ -30,54 +32,23 @@ We needed:
 
 Think of it like object-oriented programming:
 
-- **Agent-Type** = Interface (defines the contract)
+- **Role** = Interface (defines the contract)
 - **User Workspace** = Class (implements the interface)
 - **Sandbox** = Instance (runtime execution + state)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 1: Agent-Type (Interface)                                 │
-│  agent-types/movie/                                             │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (template with {{placeholders}})                  │
-│  └── skills/                                                    │
-│                                                                 │
-│  Canonical source. Changes propagate to all implementations.    │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ setup-agent.sh (initial) + propagate.sh (ongoing)
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 2: User Workspace (Class)                                 │
-│  workspace/agents/chetan/                                       │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (template + channel IDs)                          │
-│  ├── skills/                                                    │
-│  └── .agent-type → "movie"                                     │
-│                                                                 │
-│  Config only. No runtime state. Admin-editable.                 │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ OpenClaw sync (on sandbox creation)
-                    │ + propagate.sh (ongoing, 5 files only)
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  TIER 3: Sandbox (Instance)                                     │
-│  sandboxes/agent-chetan-xxx/                                    │
-│  ├── SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, BOOTSTRAP.md   │
-│  ├── USER.md (live document, agent-managed)                    │
-│  ├── skills/                                                    │
-│  └── memory/  ← ONLY place memory lives                        │
-│                                                                 │
-│  Runtime state. Agent executes here.                            │
-└─────────────────────────────────────────────────────────────────┘
-```
+![3-Tier Architecture](images/diagram-1-structure.png)
+
+| Tier | Name | Path | Purpose |
+|------|------|------|---------|
+| 1 | **Role** | `roles/movie/` | Template with 6 md files + skills/ |
+| 2 | **User Workspace** | `workspace/users/alice/` | Per-user config + `.role` file |
+| 3 | **Sandbox** | `sandboxes/agent-xxx/` | Runtime execution + memory/ |
 
 ---
 
 ## The 6 Files + Skills
 
-Each agent-type is a folder containing:
+Each role is a folder containing:
 
 | File | Purpose | Mutable by Agent? |
 |------|---------|-------------------|
@@ -162,10 +133,10 @@ These files are copied identically to every agent type. Change them once, update
 
 ### Skills Folder
 
-Each agent-type includes a `skills/` folder with role-specific skills:
+Each role includes a `skills/` folder with role-specific skills:
 
 ```
-agent-types/movie/skills/
+roles/movie/skills/
 ├── radarr/
 │   └── SKILL.md
 ├── radarr-recommend/
@@ -174,7 +145,7 @@ agent-types/movie/skills/
     └── SKILL.md
 ```
 
-Skills are instructions the AI reads to perform specific tasks. They propagate with the agent-type.
+Skills are instructions the AI reads to perform specific tasks. They propagate with the role.
 
 ---
 
@@ -182,7 +153,7 @@ Skills are instructions the AI reads to perform specific tasks. They propagate w
 
 USER.md has three different states across the tiers:
 
-### Tier 1 (Agent-Type): Template with Placeholders
+### Tier 1 (Role): Template with Placeholders
 
 ```markdown
 # USER.md - About Your Human
@@ -202,8 +173,8 @@ USER.md has three different states across the tiers:
 # USER.md - About Your Human
 
 - **Name:** {{USER_NAME}}
-- **Workspace:** chetan
-- **Telegram ID:** 1329596227
+- **Workspace:** alice
+- **Telegram ID:** <telegram-id>
 
 ## Movie Preferences
 - **Favorite genres:** {{FAVORITE_GENRES}}
@@ -215,11 +186,11 @@ Channel-specific info is pre-filled during setup. Other placeholders remain.
 ### Tier 3 (Sandbox): Live Document
 
 ```markdown
-# USER.md - About Chetan
+# USER.md - About Alice
 
-- **Name:** Chetan
-- **Workspace:** chetan
-- **Telegram ID:** 1329596227
+- **Name:** Alice
+- **Workspace:** alice
+- **Telegram ID:** <telegram-id>
 
 ## Movie Preferences
 - **Favorite genres:** Sci-fi, Action, Thriller
@@ -232,36 +203,35 @@ The agent fills in the rest via BOOTSTRAP.md during the first session. This vers
 
 ## Setup Flow: Creating a New Agent
 
-When deploying a new user on an agent-type:
+When deploying a new user on an role:
 
 ```bash
-./setup-agent.sh movie chetan 1329596227
+./setup-user.sh movie alice <telegram-id>
 ```
 
 This:
-1. Creates `workspace/agents/chetan/`
-2. Copies all 6 files + skills from `agent-types/movie/`
+1. Creates `workspace/users/alice/`
+2. Copies all 6 files + skills from `roles/movie/`
 3. Pre-fills `{{USERNAME}}` and `{{TELEGRAM_ID}}`
-4. Creates `.agent-type` file containing `movie`
+4. Creates `.role` file containing `movie`
 
 On first session, OpenClaw creates the sandbox and syncs from the workspace. BOOTSTRAP.md guides the user through onboarding, then deletes itself.
+
+![Setup Flow](images/diagram-2-creation.png)
 
 ---
 
 ## Update Flow: Auto-Propagation
 
-We run a file watcher service (`agent-type-watcher`) that detects changes to agent-type files and automatically propagates them:
+We run a file watcher service (`role-watcher`) that detects changes to role files and automatically propagates them:
 
-```
-agent-types/movie/AGENTS.md changes
-    ↓ detected by inotifywait
-    ↓ 3-second debounce
-    ↓ propagate.sh movie
-    ↓
-workspace/agents/chetan/AGENTS.md updated
-    ↓
-sandboxes/agent-chetan-xxx/AGENTS.md updated (chmod 444)
-```
+**Propagation Flow:**
+1. `roles/movie/AGENTS.md` changes
+2. `inotifywait` detects the change
+3. 3-second debounce
+4. `propagate.sh movie` runs
+5. `workspace/users/alice/AGENTS.md` updated
+6. `sandboxes/agent-xxx/AGENTS.md` updated (chmod 444)
 
 ### What Gets Propagated
 
@@ -271,6 +241,8 @@ sandboxes/agent-chetan-xxx/AGENTS.md updated (chmod 444)
 | **Sandbox** | 5 config files (444) | USER.md, memory/, skills (OpenClaw syncs) |
 
 The key rule: **Sandbox USER.md is never touched** — it contains learned user data.
+
+![Update Flow](images/diagram-3-update.png)
 
 ---
 
@@ -304,34 +276,36 @@ This creates clear trust boundaries. The agent can evolve `USER.md` with prefere
 
 Let's say we want to give movie agents access to TV shows via Sonarr.
 
-**1. Update the agent-type:**
+**1. Update the role:**
 
-Edit `agent-types/movie/TOOLS.md`:
+Edit `roles/movie/TOOLS.md`:
 ```markdown
 ## Sonarr (TV Shows) — NEW!
 - `sonarr` — Search and download TV shows
 ```
 
-Edit `agent-types/movie/AGENTS.md`:
+Edit `roles/movie/AGENTS.md`:
 ```markdown
 ## Allowed Tools
 - `radarr` — Movies
 - `sonarr` — TV shows  # NEW!
 ```
 
-Copy sonarr skill to `agent-types/movie/skills/sonarr/`
+Copy sonarr skill to `roles/movie/skills/sonarr/`
 
 **2. File watcher auto-propagates:**
 
 The watcher detects the changes and runs `propagate.sh movie`, which:
-- Updates `workspace/agents/chetan/` (5 files + skills/)
-- Updates `sandboxes/agent-chetan-xxx/` (5 files, 444 permissions)
+- Updates `workspace/users/alice/` (5 files + skills/)
+- Updates `sandboxes/agent-alice-xxx/` (5 files, 444 permissions)
 
 **3. Next session:** All movie agents have TV show access, with their preferences intact.
 
 ---
 
 ## File Mutability Summary
+
+![File Mutability](images/diagram-4-mutability.png)
 
 | Category | Files | Who Edits | Propagated? |
 |----------|-------|-----------|-------------|
@@ -375,7 +349,7 @@ Each agent type is fully defined in version-controlled markdown files. Easy to r
 
 ```
 workspace/
-├── agent-types/
+├── roles/
 │   ├── movie/
 │   │   ├── SOUL.md
 │   │   ├── IDENTITY.md
@@ -386,20 +360,20 @@ workspace/
 │   │   └── skills/
 │   └── staff/
 │       └── ...
-├── agents/
-│   ├── chetan/
-│   │   ├── .agent-type → "movie"
+├── users/
+│   ├── alice/
+│   │   ├── .role → "movie"
 │   │   └── (6 files + skills/)
-│   ├── nisha/
-│   │   ├── .agent-type → "staff"
+│   ├── bob/
+│   │   ├── .role → "staff"
 │   │   └── ...
-│   └── nora/
+│   └── carol/
 │       └── ...
 └── services/
-    └── agent-type-watcher/
+    └── role-watcher/
         ├── watcher.sh
         ├── propagate.sh
-        └── setup-agent.sh
+        └── setup-user.sh
 ```
 
 ### The Watcher Service
@@ -407,15 +381,15 @@ workspace/
 A systemd service runs `inotifywait` to watch for changes:
 
 ```bash
-inotifywait -m -r -e modify,create,delete agent-types/ |
+inotifywait -m -r -e modify,create,delete roles/ |
 while read dir file event; do
-    agent_type="${dir#agent-types/}"
+    agent_type="${dir#roles/}"
     agent_type="${agent_type%%/*}"
     ./propagate.sh "$agent_type"
 done
 ```
 
-When any file changes in an agent-type folder, it automatically propagates to all implementing workspaces and sandboxes.
+When any file changes in an role folder, it automatically propagates to all implementing workspaces and sandboxes.
 
 ---
 
