@@ -1,3 +1,8 @@
+---
+layout: default
+title: Designing Portable AI Agent Types
+---
+
 # Designing Portable AI Agent Types: A Template-Based Architecture for Multi-Agent Systems
 
 *How we built a scalable system for deploying role-specific AI agents while preserving personality, enforcing boundaries, and enabling safe updates.*
